@@ -25,11 +25,9 @@ if not st.session_state.get('data_uploaded', False):
         st.switch_page("pages/1_📤_Upload_Data.py")
     st.stop()
 
-# Initialize KG
-if 'kg_manager' not in st.session_state:
-    st.session_state.kg_manager = KnowledgeGraphManager("data/kg.db")
-
-kg_manager = st.session_state.kg_manager
+# Initialize KG - create fresh connection each time (thread-safe)
+kg_db_path = st.session_state.get('kg_db_path', 'data/kg.db')
+kg_manager = KnowledgeGraphManager(kg_db_path)
 process_graph = ProcessGraph(kg_manager)
 entity_graph = EntityGraph(kg_manager)
 

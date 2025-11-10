@@ -27,7 +27,9 @@ class KnowledgeGraphManager:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.conn = sqlite3.connect(str(self.db_path))
+        # Thread-safe connection for Streamlit
+        # check_same_thread=False is safe because Python GIL ensures sequential execution
+        self.conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row  # Return rows as dicts
 
         self._initialize_schema()
@@ -259,5 +261,15 @@ class KnowledgeGraphManager:
 
     def close(self):
         """Close database connection"""
-        self.conn.close()
-        logger.info("knowledge_graph_closed")
+        if hasattr(self, 'conn') and self.conn:
+            self.conn.close()
+            logger.info("knowledge_graph_closed")
+
+    def __enter__(self):
+        """Context manager entry"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensures connection is closed"""
+        self.close()
+        return False  # Don't suppress exceptions

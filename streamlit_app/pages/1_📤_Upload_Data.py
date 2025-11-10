@@ -209,7 +209,7 @@ if st.session_state.data_uploaded:
                 )
 
             st.session_state.kg_initialized = True
-            st.session_state.kg_manager = kg_manager
+            st.session_state.kg_db_path = "data/kg.db"  # Store path, not connection
             st.session_state.relationships = relationships
 
             st.success(f"✅ Extracted schemas for {len(schema_results)} tables!")
@@ -230,10 +230,37 @@ if st.session_state.data_uploaded:
 
             kg_manager.close()
 
+# AI Analysis Suggestion
+if st.session_state.data_uploaded and st.session_state.kg_initialized:
+    st.markdown("---")
+    st.markdown("## 🤖 AI-Powered Insights")
+
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        st.info("💡 **New!** Let AI analyze your data to find anomalies, patterns, and potential violations before you even define rules.")
+
+        if st.button("🚀 Run AI Analysis Now", use_container_width=True):
+            st.switch_page("pages/6_🤖_AI_Assistant.py")
+
+    with col2:
+        st.markdown("**What AI Will Find:**")
+        st.markdown("- Statistical anomalies")
+        st.markdown("- Unusual patterns")
+        st.markdown("- Missing controls")
+        st.markdown("- Fraud indicators")
+
 # Navigation hint
 if st.session_state.data_uploaded and st.session_state.kg_initialized:
     st.markdown("---")
-    st.success("✅ Data ingestion complete! Proceed to **2️⃣ Define Process** to set up your audit workflow.")
+    st.success("✅ Data ingestion complete! Choose your next step:")
 
-    if st.button("➡️ Go to Process Definition", use_container_width=True):
-        st.switch_page("pages/2_📋_Define_Process.py")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("🤖 AI Assistant (Recommended)", use_container_width=True, type="primary"):
+            st.switch_page("pages/6_🤖_AI_Assistant.py")
+
+    with col2:
+        if st.button("📋 Define Process Manually", use_container_width=True):
+            st.switch_page("pages/2_📋_Define_Process.py")
