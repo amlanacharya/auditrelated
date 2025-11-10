@@ -24,3 +24,8 @@ pytest-cov>=4.1.0
 # Utilities
 python-dateutil>=2.8.0
 pydantic>=2.0.0
+
+# Frontend
+streamlit>=1.29.0
+plotly>=5.18.0
+altair>=5.1.0
