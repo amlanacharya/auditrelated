@@ -435,7 +435,12 @@ def create_table_dependency_graph():
         if show_edge_labels:
             edge_label = f"{rel['from_column']} → {rel['to_column']}"
 
-        confidence = confidence_to_score(rel.get('confidence_score'))
+        # sqlite3.Row doesn't support .get(), use bracket notation with fallback
+        try:
+            confidence = confidence_to_score(rel['confidence_score'])
+        except (KeyError, IndexError):
+            confidence = 0.5
+
         edge_color = '#2B7CE9' if confidence > 0.8 else '#FFA807' if confidence > 0.5 else '#FB7E81'
 
         G.add_edge(
@@ -472,15 +477,23 @@ def create_table_dependency_graph():
     # Show statistics
     st.markdown("#### Graph Statistics")
     col1, col2, col3, col4 = st.columns(4)
+
+    # Helper to safely get confidence score from Row object
+    def get_confidence(row):
+        try:
+            return confidence_to_score(row['confidence_score'])
+        except (KeyError, IndexError):
+            return 0.5
+
     with col1:
         st.metric("Total Tables", len(tables))
     with col2:
         st.metric("Total Relationships", len(relationships))
     with col3:
-        avg_confidence = sum(confidence_to_score(r.get('confidence_score')) for r in relationships) / max(len(relationships), 1)
+        avg_confidence = sum(get_confidence(r) for r in relationships) / max(len(relationships), 1)
         st.metric("Avg Confidence", f"{avg_confidence:.2f}")
     with col4:
-        high_conf = sum(1 for r in relationships if confidence_to_score(r.get('confidence_score')) > 0.8)
+        high_conf = sum(1 for r in relationships if get_confidence(r) > 0.8)
         st.metric("High Confidence", high_conf)
 
 
