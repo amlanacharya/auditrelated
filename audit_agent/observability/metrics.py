@@ -11,7 +11,7 @@ import time
 from typing import Dict, List, Optional
 from datetime import datetime
 import pandas as pd
-from prometheus_client import Counter, Histogram, Gauge
+from prometheus_client import Counter, Histogram, Gauge, REGISTRY
 import structlog
 
 logger = structlog.get_logger()
@@ -21,39 +21,55 @@ class MetricsCollector:
     """Collect and track system metrics"""
 
     def __init__(self):
-        """Initialize metrics collectors"""
+        """Initialize metrics collectors (idempotent - safe to call multiple times)"""
 
-        # Data health metrics
-        self.table_row_counts = Gauge(
-            "audit_table_row_count",
-            "Number of rows in each table",
-            ["table_name"]
-        )
+        # Data health metrics - use existing if already registered
+        try:
+            self.table_row_counts = Gauge(
+                "audit_table_row_count",
+                "Number of rows in each table",
+                ["table_name"]
+            )
+        except ValueError:
+            # Metric already exists, retrieve it
+            self.table_row_counts = REGISTRY._names_to_collectors.get("audit_table_row_count")
 
-        self.schema_drift_alerts = Counter(
-            "audit_schema_drift_total",
-            "Number of schema drift incidents",
-            ["table_name"]
-        )
+        try:
+            self.schema_drift_alerts = Counter(
+                "audit_schema_drift_total",
+                "Number of schema drift incidents",
+                ["table_name"]
+            )
+        except ValueError:
+            self.schema_drift_alerts = REGISTRY._names_to_collectors.get("audit_schema_drift_total")
 
         # Detection metrics
-        self.violations_detected = Counter(
-            "audit_violations_detected_total",
-            "Number of violations detected",
-            ["rule_name", "severity"]
-        )
+        try:
+            self.violations_detected = Counter(
+                "audit_violations_detected_total",
+                "Number of violations detected",
+                ["rule_name", "severity"]
+            )
+        except ValueError:
+            self.violations_detected = REGISTRY._names_to_collectors.get("audit_violations_detected_total")
 
-        self.query_duration = Histogram(
-            "audit_query_duration_seconds",
-            "Query execution time",
-            ["query_type"]
-        )
+        try:
+            self.query_duration = Histogram(
+                "audit_query_duration_seconds",
+                "Query execution time",
+                ["query_type"]
+            )
+        except ValueError:
+            self.query_duration = REGISTRY._names_to_collectors.get("audit_query_duration_seconds")
 
         # System metrics
-        self.active_rules = Gauge(
-            "audit_active_rules",
-            "Number of active violation rules"
-        )
+        try:
+            self.active_rules = Gauge(
+                "audit_active_rules",
+                "Number of active violation rules"
+            )
+        except ValueError:
+            self.active_rules = REGISTRY._names_to_collectors.get("audit_active_rules")
 
         self.metrics_data = {
             "data_quality": [],
