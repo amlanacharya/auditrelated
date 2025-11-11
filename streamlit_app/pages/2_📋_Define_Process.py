@@ -58,53 +58,62 @@ if option == "Use Pre-built Process (Expense Reimbursement)":
 
     if st.button("✅ Use This Process", use_container_width=True):
         with st.spinner("Setting up process..."):
-            # Create process
-            process_id = process_graph.create_process_type(
-                process_name="expense_reimbursement",
-                description="Employee expense reimbursement workflow"
-            )
+            # Check if process already exists
+            existing_process_id = process_graph.get_process_by_name("expense_reimbursement")
 
-            # Add steps
-            step1_id = process_graph.add_process_step(
-                process_type_id=process_id,
-                step_name="initiation",
-                sequence_order=1,
-                required_table="expenses",
-                expected_duration_minutes=0
-            )
+            if existing_process_id:
+                # Process already exists, just mark it as active
+                st.session_state.process_defined = True
+                st.session_state.process_name = "expense_reimbursement"
+                st.success("✅ Expense reimbursement process is already configured!")
+            else:
+                # Create new process
+                process_id = process_graph.create_process_type(
+                    process_name="expense_reimbursement",
+                    description="Employee expense reimbursement workflow"
+                )
 
-            step2_id = process_graph.add_process_step(
-                process_type_id=process_id,
-                step_name="approval",
-                sequence_order=2,
-                required_table="approvals",
-                expected_duration_minutes=2880  # 2 days
-            )
+                # Add steps
+                step1_id = process_graph.add_process_step(
+                    process_type_id=process_id,
+                    step_name="initiation",
+                    sequence_order=1,
+                    required_table="expenses",
+                    expected_duration_minutes=0
+                )
 
-            step3_id = process_graph.add_process_step(
-                process_type_id=process_id,
-                step_name="payment",
-                sequence_order=3,
-                required_table="payments",
-                expected_duration_minutes=10080  # 7 days
-            )
+                step2_id = process_graph.add_process_step(
+                    process_type_id=process_id,
+                    step_name="approval",
+                    sequence_order=2,
+                    required_table="approvals",
+                    expected_duration_minutes=2880  # 2 days
+                )
 
-            # Add transitions
-            process_graph.add_transition(step1_id, step2_id)
-            process_graph.add_transition(step2_id, step3_id)
+                step3_id = process_graph.add_process_step(
+                    process_type_id=process_id,
+                    step_name="payment",
+                    sequence_order=3,
+                    required_table="payments",
+                    expected_duration_minutes=10080  # 7 days
+                )
 
-            # Setup entities
-            entity_graph.create_entity_type("employee", "Employee entity")
-            entity_graph.create_entity_type("manager", "Manager entity")
-            entity_graph.create_entity_type("vendor", "Vendor entity")
+                # Add transitions
+                process_graph.add_transition(step1_id, step2_id)
+                process_graph.add_transition(step2_id, step3_id)
 
-            entity_graph.add_relationship("employee", "reports_to", "manager")
+                # Setup entities (these use INSERT OR IGNORE/REPLACE so safe to call)
+                entity_graph.create_entity_type("employee", "Employee entity")
+                entity_graph.create_entity_type("manager", "Manager entity")
+                entity_graph.create_entity_type("vendor", "Vendor entity")
 
-            st.session_state.process_defined = True
-            st.session_state.process_name = "expense_reimbursement"
+                entity_graph.add_relationship("employee", "reports_to", "manager")
 
-            st.success("✅ Expense reimbursement process configured!")
-            st.balloons()
+                st.session_state.process_defined = True
+                st.session_state.process_name = "expense_reimbursement"
+
+                st.success("✅ Expense reimbursement process configured!")
+                st.balloons()
 
 else:
     # Custom process builder
@@ -169,33 +178,42 @@ else:
                 st.error("❌ At least 2 steps are required!")
             else:
                 with st.spinner("Creating custom process..."):
-                    # Create process
-                    process_id = process_graph.create_process_type(
-                        process_name=process_name,
-                        description=process_description
-                    )
+                    # Check if process already exists
+                    existing_process_id = process_graph.get_process_by_name(process_name)
 
-                    # Add steps
-                    step_ids = []
-                    for idx, step in enumerate(steps):
-                        step_id = process_graph.add_process_step(
-                            process_type_id=process_id,
-                            step_name=step['name'],
-                            sequence_order=idx + 1,
-                            required_table=step['table'],
-                            expected_duration_minutes=step['duration_minutes']
+                    if existing_process_id:
+                        # Process already exists
+                        st.session_state.process_defined = True
+                        st.session_state.process_name = process_name
+                        st.warning(f"⚠️ Process '{process_name}' already exists! Using existing process.")
+                    else:
+                        # Create new process
+                        process_id = process_graph.create_process_type(
+                            process_name=process_name,
+                            description=process_description
                         )
-                        step_ids.append(step_id)
 
-                    # Add transitions (sequential)
-                    for i in range(len(step_ids) - 1):
-                        process_graph.add_transition(step_ids[i], step_ids[i + 1])
+                        # Add steps
+                        step_ids = []
+                        for idx, step in enumerate(steps):
+                            step_id = process_graph.add_process_step(
+                                process_type_id=process_id,
+                                step_name=step['name'],
+                                sequence_order=idx + 1,
+                                required_table=step['table'],
+                                expected_duration_minutes=step['duration_minutes']
+                            )
+                            step_ids.append(step_id)
 
-                    st.session_state.process_defined = True
-                    st.session_state.process_name = process_name
+                        # Add transitions (sequential)
+                        for i in range(len(step_ids) - 1):
+                            process_graph.add_transition(step_ids[i], step_ids[i + 1])
 
-                    st.success(f"✅ Custom process '{process_name}' created successfully!")
-                    st.balloons()
+                        st.session_state.process_defined = True
+                        st.session_state.process_name = process_name
+
+                        st.success(f"✅ Custom process '{process_name}' created successfully!")
+                        st.balloons()
 
 # Show current process if defined
 if st.session_state.get('process_defined', False):
