@@ -63,7 +63,7 @@ def create_process_flow_graph():
 
     # Get process types
     conn = kg.conn
-    cursor = conn.execute("SELECT id, name, description FROM process_types")
+    cursor = conn.execute("SELECT id, process_name as name, description FROM process_types")
     process_types = cursor.fetchall()
 
     if not process_types:
@@ -85,7 +85,7 @@ def create_process_flow_graph():
 
         # Get steps
         cursor = conn.execute(
-            "SELECT id, step_number, name, description FROM process_steps WHERE process_type_id = ? ORDER BY step_number",
+            "SELECT id, sequence_order as step_number, step_name as name, required_table as description FROM process_steps WHERE process_type_id = ? ORDER BY sequence_order",
             (process_id,)
         )
         steps = cursor.fetchall()
@@ -94,12 +94,12 @@ def create_process_flow_graph():
         cursor = conn.execute(
             """
             SELECT pt.*,
-                   from_step.name as from_step_name,
-                   to_step.name as to_step_name
+                   from_step.step_name as from_step_name,
+                   to_step.step_name as to_step_name
             FROM process_transitions pt
             LEFT JOIN process_steps from_step ON pt.from_step_id = from_step.id
             LEFT JOIN process_steps to_step ON pt.to_step_id = to_step.id
-            WHERE pt.process_type_id = ?
+            WHERE from_step.process_type_id = ?
             """,
             (process_id,)
         )
@@ -123,8 +123,8 @@ def create_process_flow_graph():
         for trans in transitions:
             if trans['from_step_id'] and trans['to_step_id']:
                 edge_label = ""
-                if trans['condition']:
-                    edge_label = f"Condition: {trans['condition']}"
+                if trans['condition_json']:
+                    edge_label = f"Condition: {trans['condition_json']}"
 
                 G.add_edge(
                     trans['from_step_id'],
@@ -197,24 +197,24 @@ def create_entity_hierarchy_graph():
     conn = kg.conn
 
     # Get entity types
-    cursor = conn.execute("SELECT DISTINCT entity_type FROM entity_types")
-    entity_types = [row['entity_type'] for row in cursor.fetchall()]
+    cursor = conn.execute("SELECT entity_name FROM entity_types")
+    entity_types = [row['entity_name'] for row in cursor.fetchall()]
 
     if not entity_types:
         st.info("No entities defined yet. Upload data to populate the entity graph.")
         return
 
-    # Get relationships
+    # Get relationships (schema uses text-based entity types, not IDs)
     cursor = conn.execute(
         """
-        SELECT er.*,
-               parent.entity_name as parent_name,
-               child.entity_name as child_name,
-               parent.entity_type as parent_type,
-               child.entity_type as child_type
-        FROM entity_relationships er
-        JOIN entity_types parent ON er.parent_entity_id = parent.id
-        JOIN entity_types child ON er.child_entity_id = child.id
+        SELECT from_entity_type as parent_name,
+               to_entity_type as child_name,
+               from_entity_type as parent_type,
+               to_entity_type as child_type,
+               relationship_type,
+               from_entity_type as parent_entity_id,
+               to_entity_type as child_entity_id
+        FROM entity_relationships
         """
     )
     relationships = cursor.fetchall()
@@ -222,12 +222,15 @@ def create_entity_hierarchy_graph():
     # Get approval authorities
     cursor = conn.execute(
         """
-        SELECT aa.*,
-               et.entity_name,
-               et.entity_type
-        FROM approval_authorities aa
-        JOIN entity_types et ON aa.entity_id = et.id
-        WHERE aa.effective_to IS NULL OR aa.effective_to >= date('now')
+        SELECT employee_id,
+               role,
+               max_amount,
+               effective_from,
+               effective_to,
+               CAST(employee_id AS TEXT) as entity_name,
+               role as entity_type
+        FROM approval_authorities
+        WHERE effective_to IS NULL OR effective_to >= date('now')
         """
     )
     authorities = cursor.fetchall()
@@ -384,7 +387,7 @@ def create_table_dependency_graph():
             to_table,
             to_column,
             relationship_type,
-            confidence_score
+            confidence as confidence_score
         FROM table_relationships
         """
     )
@@ -416,12 +419,23 @@ def create_table_dependency_graph():
         )
 
     # Add edges (relationships)
+    # Convert text confidence to numeric score
+    def confidence_to_score(conf_text):
+        if not conf_text:
+            return 0.5
+        conf_map = {'high': 0.9, 'medium': 0.6, 'low': 0.3}
+        # Try to parse as float first, fallback to text mapping
+        try:
+            return float(conf_text)
+        except (ValueError, TypeError):
+            return conf_map.get(str(conf_text).lower(), 0.5)
+
     for rel in relationships:
         edge_label = ""
         if show_edge_labels:
             edge_label = f"{rel['from_column']} → {rel['to_column']}"
 
-        confidence = rel.get('confidence_score', 1.0)
+        confidence = confidence_to_score(rel.get('confidence_score'))
         edge_color = '#2B7CE9' if confidence > 0.8 else '#FFA807' if confidence > 0.5 else '#FB7E81'
 
         G.add_edge(
@@ -463,10 +477,10 @@ def create_table_dependency_graph():
     with col2:
         st.metric("Total Relationships", len(relationships))
     with col3:
-        avg_confidence = sum(r.get('confidence_score', 1.0) for r in relationships) / max(len(relationships), 1)
+        avg_confidence = sum(confidence_to_score(r.get('confidence_score')) for r in relationships) / max(len(relationships), 1)
         st.metric("Avg Confidence", f"{avg_confidence:.2f}")
     with col4:
-        high_conf = sum(1 for r in relationships if r.get('confidence_score', 1.0) > 0.8)
+        high_conf = sum(1 for r in relationships if confidence_to_score(r.get('confidence_score')) > 0.8)
         st.metric("High Confidence", high_conf)
 
 
@@ -483,7 +497,7 @@ def create_rule_dependency_graph():
         SELECT
             id,
             rule_name,
-            rule_type,
+            rule_id as rule_type,
             severity,
             description,
             version
@@ -503,11 +517,14 @@ def create_rule_dependency_graph():
         """
         SELECT
             rd.*,
+            r1.id as parent_rule_id,
+            r2.id as dependent_rule_id,
             r1.rule_name as parent_rule,
-            r2.rule_name as dependent_rule
+            r2.rule_name as dependent_rule,
+            1 as execution_order
         FROM rule_dependencies rd
-        JOIN violation_rules r1 ON rd.parent_rule_id = r1.id
-        JOIN violation_rules r2 ON rd.dependent_rule_id = r2.id
+        JOIN violation_rules r1 ON rd.rule_id = r1.rule_id
+        JOIN violation_rules r2 ON rd.depends_on_rule_id = r2.rule_id
         """
     )
     dependencies = cursor.fetchall()
