@@ -99,10 +99,64 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("#### Quick Actions")
 
-    if st.button("🔄 Reset All", use_container_width=True):
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.rerun()
+    # Show system status with expander
+    with st.expander("📊 System Status", expanded=False):
+        from audit_agent.utils import ResetManager
+
+        reset_mgr = ResetManager("data/kg.db", "data/parquet")
+        status = reset_mgr.get_system_status()
+
+        if status['kg_database_exists']:
+            st.metric("Database", f"{status['kg_database_size_mb']:.2f} MB")
+        else:
+            st.metric("Database", "Not created")
+
+        if status['parquet_directory_exists']:
+            st.metric("Parquet Files", f"{status['parquet_files_count']} files")
+            st.metric("Parquet Size", f"{status['parquet_total_size_mb']:.2f} MB")
+        else:
+            st.metric("Parquet Data", "Not created")
+
+    # Initialize reset confirmation state
+    if 'show_reset_confirm' not in st.session_state:
+        st.session_state.show_reset_confirm = False
+
+    if not st.session_state.show_reset_confirm:
+        if st.button("🔄 Reset System", use_container_width=True, type="secondary"):
+            st.session_state.show_reset_confirm = True
+            st.rerun()
+    else:
+        st.warning("⚠️ **Warning**: This will delete ALL data and tables!")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("✅ Confirm", use_container_width=True, type="primary"):
+                with st.spinner("Resetting system..."):
+                    from audit_agent.utils import reset_system
+
+                    # Perform reset
+                    results = reset_system(
+                        kg_db_path="data/kg.db",
+                        parquet_path="data/parquet",
+                        delete_db_file=True  # Delete entire DB file for clean slate
+                    )
+
+                    if results['success']:
+                        # Clear session state
+                        for key in list(st.session_state.keys()):
+                            del st.session_state[key]
+
+                        st.success("✅ System reset complete!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Reset failed. Check logs.")
+                        st.session_state.show_reset_confirm = False
+
+        with col2:
+            if st.button("❌ Cancel", use_container_width=True):
+                st.session_state.show_reset_confirm = False
+                st.rerun()
 
     st.markdown("---")
     st.markdown("""
