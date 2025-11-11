@@ -54,12 +54,15 @@ if option == "Use Core Rules (Recommended)":
 
     if st.button("✅ Initialize Core Rules", use_container_width=True):
         with st.spinner("Initializing rules..."):
-            violation_graph.initialize_core_rules()
-
-            st.session_state.rules_initialized = True
-
-            st.success("✅ 5 core rules initialized successfully!")
-            st.balloons()
+            # Check if already initialized
+            if violation_graph.rule_exists("R001"):
+                st.session_state.rules_initialized = True
+                st.info("ℹ️ Core rules are already initialized!")
+            else:
+                violation_graph.initialize_core_rules()
+                st.session_state.rules_initialized = True
+                st.success("✅ 5 core rules initialized successfully!")
+                st.balloons()
 
 else:
     # Custom rule builder
@@ -158,6 +161,10 @@ WHERE <your_condition_here>""",
             else:
                 try:
                     with st.spinner("Creating custom rule..."):
+                        # Check if rule already exists
+                        if violation_graph.rule_exists(rule_id):
+                            st.warning(f"⚠️ Rule '{rule_id}' already exists! A new version will be created.")
+
                         violation_graph.create_rule(
                             rule_id=rule_id,
                             rule_name=rule_name,
