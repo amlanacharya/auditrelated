@@ -219,8 +219,30 @@ class ViolationGraph:
 
         return ordered
 
+    def rule_exists(self, rule_id: str) -> bool:
+        """
+        Check if a rule already exists
+
+        Args:
+            rule_id: Rule ID to check
+
+        Returns:
+            True if rule exists, False otherwise
+        """
+        cursor = self.conn.execute("""
+            SELECT COUNT(*) FROM violation_rules WHERE rule_id = ?
+        """, (rule_id,))
+
+        count = cursor.fetchone()[0]
+        return count > 0
+
     def initialize_core_rules(self):
-        """Initialize the 5 core violation rules for POC"""
+        """Initialize the 5 core violation rules for POC (idempotent)"""
+
+        # Check if already initialized
+        if self.rule_exists("R001"):
+            logger.info("core_rules_already_exist", message="Skipping initialization")
+            return
 
         today = date.today()
 
