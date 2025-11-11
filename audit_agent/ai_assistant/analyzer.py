@@ -146,6 +146,7 @@ class DataAnalyzer:
 
         # If p-value < 0.05, distribution doesn't match Benford's Law
         if p_value < 0.05:
+            import json
             self.anomalies.append(Anomaly(
                 type='statistical',
                 severity='high',
@@ -156,8 +157,8 @@ class DataAnalyzer:
                     'chi_square': round(chi2, 2),
                     'p_value': round(p_value, 4),
                     'sample_size': len(first_digits),
-                    'expected': benford_expected,
-                    'actual': {k: round(v, 3) for k, v in actual_dist.items()}
+                    'expected_distribution': json.dumps(benford_expected),  # Convert dict to JSON string
+                    'actual_distribution': json.dumps({k: round(v, 3) for k, v in actual_dist.items()})
                 },
                 suggested_action={
                     'type': 'create_rule',

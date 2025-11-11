@@ -166,17 +166,54 @@ with tab1:
                 with col1:
                     if action.get('type') == 'create_rule':
                         if st.button(f"✅ Create Rule", key=f"accept_{suggestion.id}"):
+                            # Record feedback
                             st.session_state.suggestion_engine.record_feedback(
                                 suggestion.id,
                                 'accepted'
                             )
-                            st.success("✓ Rule will be created")
-                            # TODO: Actually create the rule
+
+                            # Actually create the rule in KG
+                            from audit_agent.knowledge_graph import KnowledgeGraphManager, ViolationGraph
+                            from datetime import date
+
+                            try:
+                                kg_db_path = st.session_state.get('kg_db_path', 'data/kg.db')
+                                with KnowledgeGraphManager(kg_db_path) as kg_manager:
+                                    violation_graph = ViolationGraph(kg_manager)
+
+                                    # Generate rule ID based on suggestion
+                                    rule_id = f"AI_{suggestion.id[-6:]}"  # Use last 6 chars of suggestion ID
+
+                                    # Create SQL template based on anomaly type
+                                    sql_template = suggestion.suggested_action.get('sql_template',
+                                        f"-- Auto-generated rule for {suggestion.title}\n-- TODO: Implement detection logic"
+                                    )
+
+                                    # Only create if not exists
+                                    if not violation_graph.rule_exists(rule_id):
+                                        violation_graph.create_rule(
+                                            rule_id=rule_id,
+                                            rule_name=suggestion.suggested_action.get('rule_name', suggestion.title),
+                                            description=suggestion.description,
+                                            severity=suggestion.priority,
+                                            sql_template=sql_template,
+                                            effective_from=date.today(),
+                                            created_by="ai_assistant",
+                                            change_reason=f"AI suggestion accepted: {suggestion.title}"
+                                        )
+                                        st.success(f"✓ Rule '{rule_id}' created successfully!")
+                                        st.balloons()
+                                    else:
+                                        st.info(f"ℹ️ Rule '{rule_id}' already exists")
+                            except Exception as e:
+                                st.error(f"❌ Error creating rule: {str(e)}")
+                                st.exception(e)
 
                 with col2:
                     if st.button(f"🔍 Investigate", key=f"investigate_{suggestion.id}"):
-                        st.info("Opening investigation view...")
-                        # TODO: Show detailed data
+                        # Set investigation mode in session state
+                        st.session_state.investigating = suggestion.id
+                        st.rerun()
 
                 with col3:
                     if st.button(f"❌ Dismiss", key=f"dismiss_{suggestion.id}"):
@@ -188,6 +225,62 @@ with tab1:
 
                 # Confidence score
                 st.markdown(f"*Confidence: {suggestion.confidence * 100:.0f}%*")
+
+        # Investigation Mode
+        if st.session_state.get('investigating'):
+            st.markdown("---")
+            st.markdown("### 🔍 Investigation Details")
+
+            # Find the suggestion being investigated
+            investigating_id = st.session_state.investigating
+            investigating_suggestion = next(
+                (s for s in st.session_state.ai_suggestions if s.id == investigating_id),
+                None
+            )
+
+            if investigating_suggestion:
+                st.markdown(f"**Investigating:** {investigating_suggestion.title}")
+
+                # Show detailed evidence
+                st.markdown("#### Evidence Details")
+                evidence = investigating_suggestion.evidence
+
+                # Parse JSON strings back to dicts for display
+                import json
+                display_evidence = {}
+                for key, value in evidence.items():
+                    if isinstance(value, str) and (value.startswith('{') or value.startswith('[')):
+                        try:
+                            display_evidence[key] = json.loads(value)
+                        except:
+                            display_evidence[key] = value
+                    else:
+                        display_evidence[key] = value
+
+                # Display as formatted JSON
+                st.json(display_evidence)
+
+                # Load and show affected records if available
+                st.markdown("#### Affected Records")
+                try:
+                    table_name = investigating_suggestion.category.lower()
+                    if table_name in ['statistical', 'temporal', 'behavioral']:
+                        table_name = 'expenses'  # Default to expenses table
+
+                    data_path = Path(f"data/parquet/{table_name}")
+                    if data_path.exists():
+                        df = pd.read_parquet(str(data_path))
+                        st.dataframe(df.head(100), use_container_width=True)
+                        st.caption(f"Showing first 100 records from {table_name} table")
+                    else:
+                        st.info(f"No data available for table: {table_name}")
+                except Exception as e:
+                    st.warning(f"Could not load affected records: {str(e)}")
+
+                # Close investigation
+                if st.button("← Close Investigation"):
+                    st.session_state.investigating = None
+                    st.rerun()
 
 # ========================================
 # TAB 2: WORKFLOW SUGGESTIONS
@@ -271,8 +364,44 @@ Additional Approvers: {action.get('additional_approvers', 1)}
 
                     with col1:
                         if st.button("✅ Add to Workflow", key=f"add_{suggestion.id}"):
-                            st.success("✓ Will be added to workflow!")
-                            # TODO: Actually add to workflow
+                            # Record feedback
+                            st.session_state.suggestion_engine.record_feedback(
+                                suggestion.id,
+                                'accepted'
+                            )
+
+                            # Actually add the workflow step
+                            from audit_agent.knowledge_graph import KnowledgeGraphManager, ProcessGraph
+
+                            try:
+                                kg_db_path = st.session_state.get('kg_db_path', 'data/kg.db')
+                                with KnowledgeGraphManager(kg_db_path) as kg_manager:
+                                    process_graph = ProcessGraph(kg_manager)
+
+                                    process_name = st.session_state.process_name
+                                    process_id = process_graph.get_process_by_name(process_name)
+
+                                    if action['type'] == 'add_workflow_step':
+                                        # Get current max sequence order
+                                        flow = process_graph.get_process_flow(process_name)
+                                        max_order = max(s['sequence_order'] for s in flow['steps']) if flow['steps'] else 0
+
+                                        # Add new step
+                                        process_graph.add_process_step(
+                                            process_type_id=process_id,
+                                            step_name=action['step_name'],
+                                            sequence_order=max_order + 1,
+                                            required_table=action.get('table', None),
+                                            expected_duration_minutes=action.get('duration_minutes', 0)
+                                        )
+
+                                        st.success(f"✓ Step '{action['step_name']}' added to workflow!")
+                                        st.balloons()
+                                    else:
+                                        st.info("✓ Workflow enhancement recorded! (Advanced features coming soon)")
+                            except Exception as e:
+                                st.error(f"❌ Error adding step: {str(e)}")
+                                st.exception(e)
 
                     with col2:
                         if st.button("❌ Not Needed", key=f"skip_{suggestion.id}"):
