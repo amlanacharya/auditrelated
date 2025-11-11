@@ -24,6 +24,23 @@ class ProcessGraph:
         self.kg = kg_manager
         self.conn = kg_manager.conn
 
+    def get_process_by_name(self, process_name: str) -> Optional[int]:
+        """
+        Get process ID by name if it exists
+
+        Args:
+            process_name: Name of the process
+
+        Returns:
+            Process ID if exists, None otherwise
+        """
+        cursor = self.conn.execute("""
+            SELECT id FROM process_types WHERE process_name = ?
+        """, (process_name,))
+
+        result = cursor.fetchone()
+        return result[0] if result else None
+
     def create_process_type(self, process_name: str, description: str) -> int:
         """
         Create a new process type
@@ -50,6 +67,24 @@ class ProcessGraph:
         logger.info("process_type_created", name=process_name, id=process_id)
 
         return process_id
+
+    def get_or_create_process_type(self, process_name: str, description: str) -> int:
+        """
+        Get existing process or create if it doesn't exist
+
+        Args:
+            process_name: Name of the process
+            description: Description (used only if creating)
+
+        Returns:
+            Process type ID
+        """
+        existing_id = self.get_process_by_name(process_name)
+        if existing_id:
+            logger.info("process_type_exists", name=process_name, id=existing_id)
+            return existing_id
+
+        return self.create_process_type(process_name, description)
 
     def add_process_step(
         self,
