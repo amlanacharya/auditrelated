@@ -62,7 +62,7 @@ def create_process_flow_graph():
     st.markdown("Visualizes business process workflows with steps and transitions")
 
     # Get process types
-    conn = kg.storage.get_connection()
+    conn = kg.conn
     cursor = conn.execute("SELECT id, name, description FROM process_types")
     process_types = cursor.fetchall()
 
@@ -194,7 +194,7 @@ def create_entity_hierarchy_graph():
     st.markdown("### 👥 Entity Hierarchy Graph")
     st.markdown("Visualizes entity relationships including reporting structures and approval authorities")
 
-    conn = kg.storage.get_connection()
+    conn = kg.conn
 
     # Get entity types
     cursor = conn.execute("SELECT DISTINCT entity_type FROM entity_types")
@@ -365,7 +365,7 @@ def create_table_dependency_graph():
     st.markdown("### 🗄️ Table Dependency Graph")
     st.markdown("Visualizes database schema relationships and foreign key connections")
 
-    conn = kg.storage.get_connection()
+    conn = kg.conn
 
     # Get all tables
     cursor = conn.execute("SELECT DISTINCT table_name FROM table_schemas")
@@ -475,7 +475,7 @@ def create_rule_dependency_graph():
     st.markdown("### ⚖️ Rule Dependency Graph")
     st.markdown("Visualizes violation detection rule dependencies and execution order")
 
-    conn = kg.storage.get_connection()
+    conn = kg.conn
 
     # Get active rules
     cursor = conn.execute(
