@@ -14,11 +14,13 @@ import streamlit.components.v1 as components
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from audit_agent.knowledge_graph.kg_manager import KnowledgeGraphManager
-from audit_agent.knowledge_graph.process_graph import ProcessGraph
-from audit_agent.knowledge_graph.entity_graph import EntityGraph
-from audit_agent.knowledge_graph.table_graph import TableGraph
-from audit_agent.knowledge_graph.violation_graph import ViolationGraph
+from audit_agent.knowledge_graph import (
+    KnowledgeGraphManager,
+    ProcessGraph,
+    EntityGraph,
+    TableGraph,
+    ViolationGraph
+)
 
 st.set_page_config(page_title="Relation Visualization", page_icon="🔗", layout="wide")
 
